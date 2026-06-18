@@ -341,6 +341,43 @@
       </div>
     </div>
 
+    <!-- KUSTOM STATUS PICKER DIALOG (PENGGANTI POPUP BAWAAN OS - Goal 2) -->
+    <div id="status-picker-dialog" class="dialog-overlay hidden">
+      <div class="dialog-card">
+        <h3>Ubah Status Sesi</h3>
+        <p>Tentukan status kelayakan pengerjaan untuk sesi ini:</p>
+        <div class="status-options-container">
+          <button
+            class="status-option-btn status-todo"
+            onclick="selectStatusOption('Belum Disentuh')"
+          >
+            Belum Disentuh
+          </button>
+          <button
+            class="status-option-btn status-process"
+            onclick="selectStatusOption('Proses')"
+          >
+            Proses
+          </button>
+          <button
+            class="status-option-btn status-done"
+            onclick="selectStatusOption('Done')"
+          >
+            Done
+          </button>
+        </div>
+        <div class="dialog-actions" style="margin-top: 1rem">
+          <button
+            class="btn btn-secondary"
+            onclick="closeStatusPicker()"
+            style="width: 100%"
+          >
+            Batal
+          </button>
+        </div>
+      </div>
+    </div>
+
     <script src="matakuliah.js"></script>
   </body>
 </html>
