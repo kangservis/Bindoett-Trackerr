@@ -1,5 +1,5 @@
 // ==========================================================================
-// KONFIGURASI FIREBASE SDK (Sesuai Kredensial Asli Milik Anda) [6]
+// KONFIGURASI FIREBASE SDK (Kredensial Asli Milik Anda) [6]
 // ==========================================================================
 const firebaseConfig = {
     apiKey: "AIzaSyDr2afVRUsGP6SiTGAEB0Gwx7voHpVTeX4",
@@ -98,7 +98,7 @@ function listenAuthState() {
     });
 }
 
-// INISIALISASI PERTAMA KALI (Sinkronisasi Event Popstate Navigator - Goal 1) [14, 15]
+// INISIALISASI PERTAMA KALI
 document.addEventListener("DOMContentLoaded", () => {
     setupKeyboardListeners(); 
     
@@ -109,8 +109,28 @@ document.addEventListener("DOMContentLoaded", () => {
     initFirebase();
 });
 
-// EVENT POPSTATE: Interseptor Gestur "Kembali" Android/iOS agar SPA Mundur Sesuai Menu (Goal 1) [15]
-window.addEventListener('popstate', (e) => {
+// EVENT POPSTATE: Interseptor Gestur "Kembali" Android/iOS agar SPA Mundur Sesuai Menu (Goal 1 & 2) [15]
+window.addEventListener('popstate', async (e) => {
+    const targetView = e.state ? e.state.viewId : null;
+
+    // INTERSEPTOR GESTUR KELUAR: Jika di dashboard dan user usap kembali, pancing konfirmasi Logout (Goal 1 & 2) [15]
+    if (currentUser && targetView === 'welcome-view') {
+        // Kembalikan paksa tumpukan riwayat agar browser tidak mundur secara visual sebelum ada konfirmasi
+        history.pushState({ viewId: 'dashboard-view', currentSemesterId: null, currentCourseId: null }, '', '#dashboard-view');
+        
+        // Panggil dialog konfirmasi keluar kustom secara asinkron
+        const isConfirmed = await showCustomDialog({
+            title: "Konfirmasi Keluar",
+            message: "Apakah Anda yakin ingin keluar dari akun Anda?"
+        });
+
+        if (isConfirmed) {
+            auth.signOut(); // Jika memilih keluar, jalankan logout bersih
+        }
+        return;
+    }
+
+    // Navigasi normal untuk halaman sub-menu lainnya
     if (e.state && e.state.viewId) {
         currentSemesterId = e.state.currentSemesterId;
         currentCourseId = e.state.currentCourseId;
@@ -898,7 +918,7 @@ function renderTracker() {
         if (session.status === 'Proses') selectClass = 'status-process';
         if (session.status === 'Done') selectClass = 'status-done';
 
-        // GANTI SELECT DROPDOWN MENJADI TOMBOL STATUS KLIK (Goal: Estetika Monokrom) [8]
+        // GANTI SELECT DROPDOWN MENJADI TOMBOL STATUS KLIK (Goal 2) [8]
         card.innerHTML = `
             <div class="session-main-row">
                 <div class="session-title">
