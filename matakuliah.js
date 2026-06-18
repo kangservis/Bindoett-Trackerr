@@ -1,5 +1,5 @@
 // ==========================================================================
-// KONFIGURASI FIREBASE SDK (Kredensial Asli Milik Anda) [6]
+// KONFIGURASI FIREBASE SDK (Sesuai Kredensial Asli Milik Anda) [6]
 // ==========================================================================
 const firebaseConfig = {
     apiKey: "AIzaSyDr2afVRUsGP6SiTGAEB0Gwx7voHpVTeX4",
@@ -19,7 +19,8 @@ let currentUser = null;
 let auth = null;        
 let db = null;          // Instansi Firestore Database
 let unsubscribeSnapshot = null; // Menyimpan fungsi penutup listener real-time
-let isRegistering = false;      // Bendera penanda pendaftaran akun baru agar tidak otomatis login [10]
+let isRegistering = false;      // Bendera penanda pendaftaran akun baru agar tidak otomatis masuk [10]
+let activeSessionIdForStatus = null; // Menyimpan ID sesi yang statusnya sedang diubah
 
 // KONFIGURASI DATABASE LOKAL (IndexedDB untuk Menyimpan File Asli PDF) [1, 2]
 const DB_NAME = 'edutracker_db';
@@ -97,11 +98,26 @@ function listenAuthState() {
     });
 }
 
-// INISIALISASI PERTAMA KALI
+// INISIALISASI PERTAMA KALI (Sinkronisasi Event Popstate Navigator - Goal 1) [14, 15]
 document.addEventListener("DOMContentLoaded", () => {
     setupKeyboardListeners(); 
-    navigateTo('welcome-view');
+    
+    // Inisiasi awal stack history agar sistem gestur Android bekerja sinkron [14]
+    history.replaceState({ viewId: 'welcome-view', currentSemesterId: null, currentCourseId: null }, '', '#welcome-view');
+    navigateTo('welcome-view', false); // Jangan pushState lagi saat pertama dimuat
+    
     initFirebase();
+});
+
+// EVENT POPSTATE: Interseptor Gestur "Kembali" Android/iOS agar SPA Mundur Sesuai Menu (Goal 1) [15]
+window.addEventListener('popstate', (e) => {
+    if (e.state && e.state.viewId) {
+        currentSemesterId = e.state.currentSemesterId;
+        currentCourseId = e.state.currentCourseId;
+        navigateTo(e.state.viewId, false); // Navigasi mundur tanpa membuat stack history baru [15]
+    } else {
+        navigateTo('welcome-view', false);
+    }
 });
 
 // INISIALISASI FIREBASE SECARA AMAN + OFFLINE & SESSION PERSISTENCE (Bebas Crash pada Firefox) [12]
@@ -222,13 +238,18 @@ function clearAuthInputs() {
     });
 }
 
-// ALUR NAVIGASI (SPA ENGINE)
-function navigateTo(viewId) {
+// ALUR NAVIGASI SPA DENGAN SINKRONISASI STACK RIWAYAT BROWSER (Goal 1) [14]
+function navigateTo(viewId, pushToHistory = true) {
     document.querySelectorAll('.view-section').forEach(view => {
         view.classList.add('hidden');
     });
     
     document.getElementById(viewId).classList.remove('hidden');
+
+    // Catat perpindahan halaman di history stack browser agar tombol "Kembali" Android sinkron [14]
+    if (pushToHistory) {
+        history.pushState({ viewId, currentSemesterId, currentCourseId }, '', `#${viewId}`);
+    }
 
     if (viewId === 'welcome-view') {
         document.body.className = 'on-welcome';
@@ -484,6 +505,31 @@ function showCustomDialog({ title, message, showCancel = true, confirmText = "OK
             newConfirm.focus(); // Fokuskan kursor browser ke tombol konfirmasi baru agar siap ditekan Enter [8]
         }, 50);
     });
+}
+
+/* ==========================================================================
+   KUSTOM PEMILIH STATUS / STATUS PICKER OVERLAY (Goal 2) [8]
+   ========================================================================== */
+function openStatusPicker(sessionId) {
+    activeSessionIdForStatus = sessionId;
+    document.getElementById('status-picker-dialog').classList.remove('hidden');
+    
+    // Matikan kedipan kursor input yang aktif jika ada
+    if (document.activeElement) {
+        document.activeElement.blur();
+    }
+}
+
+function closeStatusPicker() {
+    document.getElementById('status-picker-dialog').classList.add('hidden');
+    activeSessionIdForStatus = null;
+}
+
+function selectStatusOption(statusValue) {
+    if (activeSessionIdForStatus) {
+        updateSessionStatus(activeSessionIdForStatus, statusValue);
+        closeStatusPicker();
+    }
 }
 
 
@@ -819,7 +865,7 @@ function selectCourse(id) {
 
 
 /* ==========================================================================
-   3. TRACKER VIEW - DETAIL SESI & CATATAN
+   3. TRACKER VIEW - DETAIL SESI & CATATAN (MENGGUNAKAN BADGE PEMILIH KUSTOM - Goal 2)
    ========================================================================== */
 function renderTracker() {
     const sem = appData.find(s => s.id === currentSemesterId);
@@ -852,6 +898,7 @@ function renderTracker() {
         if (session.status === 'Proses') selectClass = 'status-process';
         if (session.status === 'Done') selectClass = 'status-done';
 
+        // GANTI SELECT DROPDOWN MENJADI TOMBOL STATUS KLIK (Goal: Estetika Monokrom) [8]
         card.innerHTML = `
             <div class="session-main-row">
                 <div class="session-title">
@@ -859,11 +906,9 @@ function renderTracker() {
                     <span>Kategori: ${session.type}</span>
                 </div>
                 <div>
-                    <select class="status-dropdown ${selectClass}" onchange="updateSessionStatus('${session.id}', this.value)">
-                        <option value="Belum Disentuh" ${session.status === 'Belum Disentuh' ? 'selected' : ''}>Belum Disentuh</option>
-                        <option value="Proses" ${session.status === 'Proses' ? 'selected' : ''}>Proses</option>
-                        <option value="Done" ${session.status === 'Done' ? 'selected' : ''}>Done</option>
-                    </select>
+                    <div class="status-badge-trigger ${selectClass}" onclick="openStatusPicker('${session.id}')">
+                        ${session.status}
+                    </div>
                 </div>
             </div>
             
