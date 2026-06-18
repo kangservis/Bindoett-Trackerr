@@ -8,7 +8,7 @@
     
     /* Aksentuasi Monokrom */
     --primary-color: #333333;     /* Dark Grey Accent */
-    --primary-light: #F1F3F5;     /* Light Grey Accent modern premium */
+    --primary-light: #F1F3F5;     /* Light Grey Accent modern premium (Pengganti Beige) */
     
     /* Status Pastel */
     --status-todo-bg: #FFE3E3;    /* Soft Red */
@@ -89,7 +89,7 @@ body.on-welcome .app-header {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* GREETINGS FULLSCREEN CENTERING (Responsive Frame) */
+/* GREETINGS FULLSCREEN CENTERING (Responsive Frame - Optimized) */
 #welcome-view {
     display: flex;
     align-items: center;
@@ -103,7 +103,7 @@ body.on-welcome .app-header {
     border: 1px solid var(--border-color);
     border-radius: 28px;
     width: 100%;
-    min-height: 80vh; /* Tinggi fleksibel adaptif di HP layar kecil */
+    min-height: 80vh; /* Menggunakan min-height agar elastis di HP kecil */
     height: auto;
     max-width: 500px;
     display: flex;
@@ -588,13 +588,13 @@ body.on-welcome .app-header {
     color: var(--text-sub);
 }
 
-/* GAYA TOMBOL LENCANA PEMILIH STATUS (Goal 2) */
+/* GAYA TOMBOL LENCANA PEMILIH STATUS (Dengan Warna Pastel Eksplisit) */
 .status-badge-trigger {
     padding: 0.45rem 0.8rem;
     font-size: 0.8rem;
     font-weight: 700;
     border-radius: 8px;
-    border: 1px solid var(--border-color);
+    border: 1.5px solid var(--border-color);
     cursor: pointer;
     text-align: center;
     min-width: 110px;
@@ -604,6 +604,25 @@ body.on-welcome .app-header {
 
 .status-badge-trigger:active {
     transform: scale(0.95);
+}
+
+/* Warna Pastel untuk Lencana Status di Daftar Sesi Sesuai Pilihan (Fixing) */
+.status-badge-trigger.status-todo {
+    background-color: var(--status-todo-bg) !important;
+    color: var(--status-todo-text) !important;
+    border-color: #FFC1C1 !important;
+}
+
+.status-badge-trigger.status-process {
+    background-color: var(--status-process-bg) !important;
+    color: var(--status-process-text) !important;
+    border-color: #FFE4A0 !important;
+}
+
+.status-badge-trigger.status-done {
+    background-color: var(--status-done-bg) !important;
+    color: var(--status-done-text) !important;
+    border-color: #C3E6CB !important;
 }
 
 /* KUSTOM STATUS OPTION BUTTONS PADA DIALOG */
@@ -627,6 +646,25 @@ body.on-welcome .app-header {
 
 .status-option-btn:active {
     transform: scale(0.97);
+}
+
+/* Warna Pastel Eksplisit pada Dialog Status Picker */
+.status-option-btn.status-todo {
+    background-color: var(--status-todo-bg) !important;
+    color: var(--status-todo-text) !important;
+    border: 1.5px solid #FFC1C1;
+}
+
+.status-option-btn.status-process {
+    background-color: var(--status-process-bg) !important;
+    color: var(--status-process-text) !important;
+    border: 1.5px solid #FFE4A0;
+}
+
+.status-option-btn.status-done {
+    background-color: var(--status-done-bg) !important;
+    color: var(--status-done-text) !important;
+    border: 1.5px solid #C3E6CB;
 }
 
 /* Kolom Catatan */
