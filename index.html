@@ -113,14 +113,8 @@
         </div>
       </section>
 
-      <!-- 2. DASHBOARD UTAMA (Daftar Semester) -->
+      <!-- 2. DASHBOARD UTAMA (Daftar Semester - TOMBOL BACK SEBELUMNYA DI SINI TELAH DIHAPUS - Goal 2) -->
       <section id="dashboard-view" class="view-section hidden">
-        <div class="back-nav">
-          <button class="btn-back" onclick="navigateTo('welcome-view')">
-            ← Kembali
-          </button>
-        </div>
-
         <div class="section-header">
           <h3>Daftar Semester</h3>
           <div style="display: flex; gap: 0.5rem">
@@ -341,10 +335,11 @@
       </div>
     </div>
 
-    <!-- KUSTOM STATUS PICKER DIALOG (PENGGANTI POPUP BAWAAN OS - Goal 2) -->
+    <!-- KUSTOM PEMILIH STATUS / STATUS PICKER OVERLAY -->
     <div id="status-picker-dialog" class="dialog-overlay hidden">
       <div class="dialog-card">
-        <h3>Ubah Status Sesi:</h3>
+        <h3>Ubah Status Sesi</h3>
+        <p>Tentukan status progres pengerjaan untuk sesi ini:</p>
         <div class="status-options-container">
           <button
             class="status-option-btn status-todo"
@@ -365,11 +360,11 @@
             Done
           </button>
         </div>
-        <div class="dialog-actions" style="margin-top: 1rem">
+        <div class="dialog-actions" style="margin-top: 1.2rem">
           <button
             class="btn btn-secondary"
-            onclick="closeStatusPicker()"
             style="width: 100%"
+            onclick="closeStatusPicker()"
           >
             Batal
           </button>
