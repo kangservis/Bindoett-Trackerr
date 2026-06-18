@@ -588,6 +588,47 @@ body.on-welcome .app-header {
     color: var(--text-sub);
 }
 
+/* GAYA TOMBOL LENCANA PEMILIH STATUS (Goal 2) */
+.status-badge-trigger {
+    padding: 0.45rem 0.8rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    text-align: center;
+    min-width: 110px;
+    display: inline-block;
+    transition: transform var(--transition-speed) ease;
+}
+
+.status-badge-trigger:active {
+    transform: scale(0.95);
+}
+
+/* KUSTOM STATUS OPTION BUTTONS PADA DIALOG */
+.status-options-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    width: 100%;
+}
+
+.status-option-btn {
+    width: 100%;
+    padding: 0.8rem;
+    border: none;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: transform var(--transition-speed) ease;
+}
+
+.status-option-btn:active {
+    transform: scale(0.97);
+}
+
 /* Kolom Catatan */
 .session-note-row {
     width: 100%;
@@ -609,34 +650,6 @@ body.on-welcome .app-header {
 
 .session-note-input:focus {
     border-color: var(--primary-color);
-}
-
-/* DROPDOWN STATUS CUSTOM */
-.status-dropdown {
-    padding: 0.4rem 0.6rem;
-    font-size: 0.8rem;
-    font-weight: 600;
-    border-radius: 8px;
-    border: none;
-    outline: none;
-    cursor: pointer;
-    min-height: 36px;
-    transition: all var(--transition-speed);
-}
-
-.status-todo {
-    background-color: var(--status-todo-bg);
-    color: var(--status-todo-text);
-}
-
-.status-process {
-    background-color: var(--status-process-bg);
-    color: var(--status-process-text);
-}
-
-.status-done {
-    background-color: var(--status-done-bg);
-    color: var(--status-done-text);
 }
 
 /* MODAL BOX */
