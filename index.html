@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Kalkulator & Tracker Tugas Kuliah</title>
+    <link rel="stylesheet" href="style.css" />
+    <!-- Google Fonts untuk font modern & minimalis -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- SDK FIREBASE COMPAT (CDN Tanpa Build) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  </head>
+  <body class="on-welcome">
+    <!-- Header hanya muncul di luar Welcome Screen secara dinamis -->
+    <header class="app-header">
+      <div class="header-content">
+        <h1>Tracker Tugas Kuliah BINDOETTTTTT</h1>
+        <p>Wong Mumet</p>
+      </div>
+    </header>
+
+    <main class="app-container">
+      <!-- 1. WELCOME SCREEN (GREETINGS + AUTENTIKASI LOGIN) -->
+      <section id="welcome-view" class="view-section">
+        <div class="welcome-frame">
+          <div class="welcome-top">
+            <h1>BINDOETTTTTT</h1>
+            <p class="welcome-subtitle">Tracker Tugas Kuliah</p>
+          </div>
+
+          <!-- AREA LOGIN & DAFTAR AKUN -->
+          <div class="welcome-center">
+            <!-- KARTU LOGIN -->
+            <div id="login-card" class="portal-card auth-card">
+              <div class="portal-card-icon">👨🏽‍🎓</div>
+              <h3>GET SHIT DONE</h3>
+              <p>TERNO SONTEK</p>
+
+              <div class="auth-form">
+                <input
+                  type="email"
+                  id="auth-email"
+                  placeholder="Email Anda"
+                  class="auth-input"
+                />
+                <input
+                  type="password"
+                  id="auth-password"
+                  placeholder="Password"
+                  class="auth-input"
+                />
+                <button
+                  class="btn btn-primary btn-auth"
+                  onclick="handleLogin()"
+                >
+                  Masuk Sekarang →
+                </button>
+              </div>
+
+              <p class="auth-toggle">
+                Belum punya akun?
+                <span onclick="toggleAuthMode(true)">Daftar disini</span>
+              </p>
+            </div>
+
+            <!-- KARTU REGISTER (Tersembunyi secara default) -->
+            <div id="register-card" class="portal-card auth-card hidden">
+              <div class="portal-card-icon">🔐</div>
+              <h3>Ndamel Akun Rumiyen</h3>
+              <p>Nggaeo akun anyar sek gok!</p>
+
+              <div class="auth-form">
+                <input
+                  type="email"
+                  id="reg-email"
+                  placeholder="Email Baru"
+                  class="auth-input"
+                />
+                <input
+                  type="password"
+                  id="reg-password"
+                  placeholder="Buat Password"
+                  class="auth-input"
+                />
+                <button
+                  class="btn btn-primary btn-auth"
+                  onclick="handleRegister()"
+                >
+                  Daftar →
+                </button>
+              </div>
+
+              <p class="auth-toggle">
+                Sudah punya akun?
+                <span onclick="toggleAuthMode(false)">Masuk disini</span>
+              </p>
+            </div>
+          </div>
+
+          <div class="welcome-bottom">
+            <h2>Yohh gek ndang sat settt 👏🏻👏🏻👏🏻</h2>
+            <p class="welcome-motto">josjisss</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. DASHBOARD UTAMA (Daftar Semester) -->
+      <section id="dashboard-view" class="view-section hidden">
+        <div class="back-nav">
+          <button class="btn-back" onclick="navigateTo('welcome-view')">
+            ← Kembali
+          </button>
+        </div>
+
+        <div class="section-header">
+          <h3>Daftar Semester</h3>
+          <div style="display: flex; gap: 0.5rem">
+            <button class="btn btn-secondary" onclick="handleLogout()">
+              Keluar
+            </button>
+            <button
+              class="btn btn-primary"
+              onclick="openModal('semester-modal')"
+            >
+              + Semester
+            </button>
+          </div>
+        </div>
+
+        <div id="semester-list" class="grid-list">
+          <!-- Diisi dinamis oleh JS -->
+        </div>
+      </section>
+
+      <!-- 3. HALAMAN SEMESTER (Daftar Mata Kuliah & Upload PDF) -->
+      <section id="semester-view" class="view-section hidden">
+        <div class="back-nav">
+          <button class="btn-back" onclick="navigateTo('dashboard-view')">
+            ← Kembali ke Daftar Semester
+          </button>
+        </div>
+
+        <div class="semester-header-box">
+          <h2 id="current-semester-title">Semester</h2>
+          <div class="progress-container-main">
+            <span>Progres Semester:</span>
+            <strong id="semester-progress-text">0%</strong>
+            <div class="progress-bar-bg">
+              <div
+                id="semester-progress-bar"
+                class="progress-bar-fill"
+                style="width: 0%"
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Space Dokumen PDF Lokal -->
+        <div class="document-section">
+          <h4>Lampiran Dokumen Semester</h4>
+          <div class="document-grid">
+            <div class="document-card">
+              <h5>Billing Semester</h5>
+              <div id="billing-status" class="file-status">Belum ada file</div>
+              <label class="btn-file-label">
+                Pilih Berkas PDF
+                <input
+                  type="file"
+                  id="file-billing"
+                  accept="application/pdf"
+                  onchange="uploadLocalFile('billing')"
+                />
+              </label>
+              <button
+                id="btn-delete-billing"
+                class="btn-delete-file hidden"
+                onclick="deleteLocalFile('billing')"
+              >
+                Hapus Berkas
+              </button>
+            </div>
+
+            <div class="document-card">
+              <h5>Nilai Akhir Semester</h5>
+              <div id="nilai-status" class="file-status">Belum ada file</div>
+              <label class="btn-file-label">
+                Pilih Berkas PDF
+                <input
+                  type="file"
+                  id="file-nilai"
+                  accept="application/pdf"
+                  onchange="uploadLocalFile('nilai')"
+                />
+              </label>
+              <button
+                id="btn-delete-nilai"
+                class="btn-delete-file hidden"
+                onclick="deleteLocalFile('nilai')"
+              >
+                Hapus Berkas
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-header">
+          <h3>Mata Kuliah</h3>
+          <button class="btn btn-primary" onclick="openModal('course-modal')">
+            + Mata Kuliah
+          </button>
+        </div>
+
+        <div id="course-list" class="grid-list">
+          <!-- Diisi dinamis oleh JS -->
+        </div>
+      </section>
+
+      <!-- 4. HALAMAN TRACKER SESI (Detail Sesi) -->
+      <section id="tracker-view" class="view-section hidden">
+        <div class="back-nav">
+          <button class="btn-back" onclick="navigateTo('semester-view')">
+            ← Kembali ke Matkul
+          </button>
+        </div>
+
+        <div class="course-header-box">
+          <h2 id="current-course-title">Mata Kuliah</h2>
+          <p id="current-course-parent-semester">Semester</p>
+          <div class="progress-container-main">
+            <span>Progres Matkul:</span>
+            <strong id="course-progress-text">0%</strong>
+            <div class="progress-bar-bg">
+              <div
+                id="course-progress-bar"
+                class="progress-bar-fill"
+                style="width: 0%"
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <h3 class="session-section-title">Daftar Sesi Perkuliahan</h3>
+        <div id="session-list" class="session-list-container">
+          <!-- Diisi dinamis oleh JS -->
+        </div>
+      </section>
+    </main>
+
+    <!-- MODAL POPUP: TAMBAH SEMESTER -->
+    <div id="semester-modal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Tambah Semester Baru</h3>
+        <input
+          type="text"
+          id="input-semester-name"
+          placeholder="Contoh: Semester 7"
+          maxlength="30"
+        />
+        <div class="modal-actions">
+          <button
+            class="btn btn-secondary"
+            onclick="closeModal('semester-modal')"
+          >
+            Batal
+          </button>
+          <button class="btn btn-primary" onclick="addSemester()">
+            Simpan
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL POPUP: TAMBAH MATA KULIAH -->
+    <div id="course-modal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Tambah Mata Kuliah</h3>
+        <input
+          type="text"
+          id="input-course-name"
+          placeholder="Contoh: Pemrograman Web"
+          maxlength="50"
+        />
+
+        <!-- Selektor Tipe Kuliah -->
+        <div class="form-group">
+          <label class="form-label">Tipe Perkuliahan:</label>
+          <div class="type-selector-grid">
+            <label class="type-option">
+              <input type="radio" name="course-type" value="Tuton" checked />
+              <div class="type-box">
+                <span class="type-title">Tuton</span>
+                <span class="type-desc">8 Sesi (Tugas & Diskusi)</span>
+              </div>
+            </label>
+            <label class="type-option">
+              <input type="radio" name="course-type" value="Praktik" />
+              <div class="type-box">
+                <span class="type-title">Praktik</span>
+                <span class="type-desc">3 Sesi (Tugas 1, 2, 3)</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button
+            class="btn btn-secondary"
+            onclick="closeModal('course-modal')"
+          >
+            Batal
+          </button>
+          <button class="btn btn-primary" onclick="addCourse()">Simpan</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- KUSTOM DIALOG & CONFIRM MODAL -->
+    <div id="custom-dialog" class="dialog-overlay hidden">
+      <div class="dialog-card">
+        <h3 id="dialog-title">Konfirmasi</h3>
+        <p id="dialog-message">
+          Apakah Anda yakin ingin melakukan tindakan ini?
+        </p>
+        <div class="dialog-actions">
+          <button id="dialog-btn-cancel" class="btn btn-secondary">
+            Batal
+          </button>
+          <button id="dialog-btn-confirm" class="btn btn-primary">
+            Ya, Lanjutkan
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="matakuliah.js"></script>
+  </body>
+</html>
