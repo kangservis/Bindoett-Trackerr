@@ -261,11 +261,8 @@ function clearAuthInputs() {
     });
 }
 
-// ALUR NAVIGASI SPA DENGAN SINKRONISASI STACK BROWSER
-async function navigateTo(viewId, pushToHistory = true) {
-    // SINKRONISASI INSTAN: Paksa kirim ketikan terakhir ke cloud database saat berpindah halaman [9]
-    await saveData(); 
-
+// ALUR NAVIGASI SPA DENGAN SINKRONISASI STACK BROWSER (Murni Sinkron & Super Lincah - FIX CRASH)
+function navigateTo(viewId, pushToHistory = true) {
     document.querySelectorAll('.view-section').forEach(view => {
         view.classList.add('hidden');
     });
@@ -769,7 +766,7 @@ function renderFileStatus(type, fileMeta) {
 
     if (fileMeta) {
         statusEl.innerHTML = `
-            <span class="file-link" onclick="viewLocalFile('${type}')">📄 ${escapeHTML(fileMeta.name)}</span>
+            <span class="file-link" onclick="viewLocalFile('${fileMeta.dbKey}')">📄 ${escapeHTML(fileMeta.name)}</span>
             <br><span style="font-size:0.7rem;">Diupload: ${fileMeta.uploadedAt}</span>
         `;
         deleteBtn.classList.remove('hidden');
@@ -959,6 +956,7 @@ function renderTracker() {
         if (session.status === 'Proses') selectClass = 'status-process';
         if (session.status === 'Done') selectClass = 'status-done';
 
+        // GANTI SELECT DROPDOWN MENJADI TOMBOL STATUS KLIK (Goal 2) [8]
         // Ditambahkan Event 'onblur' untuk memaksa trigger penyimpanan mutlak ke Cloud Firestore saat mengklik area luar (Goal 1) [8, 17]
         card.innerHTML = `
             <div class="session-main-row">
