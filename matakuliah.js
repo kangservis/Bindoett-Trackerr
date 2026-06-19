@@ -24,7 +24,6 @@ let db = null;          // Instansi Firestore Database
 let unsubscribeSnapshot = null; // Menyimpan fungsi penutup listener real-time
 let isRegistering = false;      // Bendera penanda pendaftaran akun baru agar tidak otomatis masuk [10]
 let activeSessionIdForStatus = null; // Menyimpan ID sesi yang statusnya sedang diubah
-let debounceTimer = null;       // Timer penahan penyimpanan catatan (Debounce)
 
 // KONFIGURASI DATABASE LOKAL (IndexedDB untuk Menyimpan File Asli PDF) [1, 2]
 const DB_NAME = 'edutracker_db';
@@ -253,14 +252,6 @@ async function saveData() {
     }
 }
 
-// PAKSA SIMPAN CATATAN YANG TERTUNDA (Flush pending save sebelum pindah halaman / logout)
-function flushPendingNotesSave() {
-    if (debounceTimer) {
-        clearTimeout(debounceTimer);
-        saveData(); // Kirim sisa ketikan terakhir langsung ke Firestore Cloud
-    }
-}
-
 // FUNGSI PEMBERSIH INPUT LOGIN & DAFTAR (Solusi Masalah 2)
 function clearAuthInputs() {
     const ids = ['auth-username', 'auth-password', 'reg-username', 'reg-password'];
@@ -271,8 +262,9 @@ function clearAuthInputs() {
 }
 
 // ALUR NAVIGASI SPA DENGAN SINKRONISASI STACK BROWSER
-function navigateTo(viewId, pushToHistory = true) {
-    flushPendingNotesSave(); // Amankan ketikan catatan yang tertunda sebelum halaman dipindah!
+async function navigateTo(viewId, pushToHistory = true) {
+    // SINKRONISASI INSTAN: Paksa kirim ketikan terakhir ke cloud database saat berpindah halaman [9]
+    await saveData(); 
 
     document.querySelectorAll('.view-section').forEach(view => {
         view.classList.add('hidden');
@@ -788,16 +780,7 @@ function renderFileStatus(type, fileMeta) {
 }
 
 // MENAMPILKAN PDF DARI BASE64 CLOUD SECARA AMAN DI TAB BARU (Mencegah Popup Blocker)
-async function viewLocalFile(type) {
-    const sem = appData.find(s => s.id === currentSemesterId);
-    if (!sem) return;
-
-    const fileMeta = type === 'billing' ? sem.billingFile : sem.nilaiFile;
-    if (!fileMeta || !fileMeta.data) {
-        showCustomDialog({ title: "Gagal", message: "Berkas fisik PDF tidak ditemukan.", showCancel: false });
-        return;
-    }
-
+async function viewLocalFile(dbKey) {
     const newTab = window.open('about:blank', '_blank');
     if (!newTab) {
         showCustomDialog({ title: "Popup Terblokir", message: "Harap aktifkan perizinan popup pada pengaturan browser Anda untuk membuka dokumen.", showCancel: false });
@@ -805,10 +788,15 @@ async function viewLocalFile(type) {
     }
 
     try {
-        // Konversi Base64 kembali ke objek Blob agar bisa dibaca browser secara asinkron
-        const fileBlob = base64ToBlob(fileMeta.data, 'application/pdf');
-        const fileURL = URL.createObjectURL(fileBlob);
-        newTab.location.href = fileURL; 
+        const fileBlob = await getFileFromDB(dbKey);
+        if (fileBlob) {
+            const fileURL = URL.createObjectURL(fileBlob);
+            newTab.location.href = fileURL; 
+        } else {
+            newTab.close();
+            // Informasi bahwa file terikat dengan perangkat lokal (Goal 3.1)
+            showCustomDialog({ title: "Tidak Ditemukan", message: "Berkas fisik PDF tidak ditemukan.", showCancel: false });
+        }
     } catch (error) {
         newTab.close();
         console.error(error);
@@ -938,7 +926,7 @@ function selectCourse(id) {
 
 
 /* ==========================================================================
-   3. TRACKER VIEW - DETAIL SESI & CATATAN
+   3. TRACKER VIEW - DETAIL SESI & CATATAN (SISTEM BLUR AUTO-SAVE BARU) [8, 17]
    ========================================================================== */
 function renderTracker() {
     const sem = appData.find(s => s.id === currentSemesterId);
@@ -971,8 +959,7 @@ function renderTracker() {
         if (session.status === 'Proses') selectClass = 'status-process';
         if (session.status === 'Done') selectClass = 'status-done';
 
-        // GANTI SELECT DROPDOWN MENJADI TOMBOL STATUS KLIK (Goal 2) [8]
-        // Tambahkan pemicu autoResizeTextarea(this) pada oninput agar responsif instan saat diketik (Goal 1 & 2) [17]
+        // Ditambahkan Event 'onblur' untuk memaksa trigger penyimpanan mutlak ke Cloud Firestore saat mengklik area luar (Goal 1) [8, 17]
         card.innerHTML = `
             <div class="session-main-row">
                 <div class="session-title">
@@ -991,13 +978,14 @@ function renderTracker() {
                     class="session-note-input" 
                     placeholder="Tambahkan catatan untuk Sesi ${session.sessionNum}..." 
                     oninput="updateSessionNote('${session.id}', this.value); autoResizeTextarea(this);"
+                    onblur="saveData();"
                 >${escapeHTML(session.note || '')}</textarea>
             </div>
         `;
         sessionListContainer.appendChild(card);
     });
 
-    // SISTEM AUTO-FIT ON LOAD: Menghitung tinggi scroll semula secara dinamis saat halaman baru dimuat (Goal 1 & 2) [17]
+    // SISTEM AUTO-FIT ON LOAD: Menghitung tinggi scroll semula secara dinamis saat halaman baru dimuat [17]
     setTimeout(() => {
         const textareas = sessionListContainer.querySelectorAll('.session-note-input');
         textareas.forEach(textarea => {
@@ -1006,7 +994,7 @@ function renderTracker() {
     }, 15);
 }
 
-// LOGIKA AUTO-RESIZE TEXTAREA SANGAT RINGAN (Goal 1 & 2) [17]
+// LOGIKA AUTO-RESIZE TEXTAREA SANGAT RINGAN [17]
 function autoResizeTextarea(textarea) {
     textarea.style.height = 'auto'; // Atur ulang tinggi ke minimum terlebih dahulu [17]
     textarea.style.height = textarea.scrollHeight + 'px'; // Sesuaikan tinggi dengan isi gulir teks aktual [17]
@@ -1027,6 +1015,7 @@ function updateSessionStatus(sessionId, newStatus) {
     }
 }
 
+// LOGIKA SAVE ON BLUR: Ketikan disimpan instan di memori lokal agar lincah, penulisan Cloud Firestore hanya terjadi saat klik luar / blur (Goal 1) [8, 17]
 function updateSessionNote(sessionId, textContent) {
     const sem = appData.find(s => s.id === currentSemesterId);
     if (!sem) return;
@@ -1038,14 +1027,8 @@ function updateSessionNote(sessionId, textContent) {
     if (session) {
         session.note = textContent;
         
-        // Simpan ke cadangan lokal secara instan
+        // Simpan langsung ke memori lokal browser agar tetap aman walau koneksi mati mendadak
         localStorage.setItem(`edutracker_data_${currentUser.uid}`, JSON.stringify(appData));
-
-        // Debounce Firestore Save (Goal: Mengatasi Race Condition & Out-of-order writes) [18]
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-            saveData(); // Tulis ke cloud hanya setelah selesai mengetik (jeda 700ms) [18]
-        }, 700);
     }
 }
 
