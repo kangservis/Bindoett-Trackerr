@@ -1,5 +1,5 @@
 // ==========================================================================
-// KONFIGURASI FIREBASE SDK (Kredensial Asli Milik Anda) [6]
+// KONFIGURASI FIREBASE SDK (Sesuai Kredensial Asli Milik Anda) [6]
 // ==========================================================================
 const firebaseConfig = {
     apiKey: "AIzaSyDr2afVRUsGP6SiTGAEB0Gwx7voHpVTeX4",
@@ -10,6 +10,9 @@ const firebaseConfig = {
     appId: "1:105475447262:web:70f79d2b387b5da09c654f",
     measurementId: "G-VC0S1KZS1H"
 };
+
+// DOMAIN BAYANGAN KHUSUS UNTUK METODE USERNAME (Goal: Tanpa mengetik @gmail.com)
+const DUMMY_DOMAIN = "@tracker.com";
 
 // STATE MANAGEMENT & DATA PERSISTENCE
 let appData = [];
@@ -74,7 +77,7 @@ async function deleteFileFromDB(key) {
     });
 }
 
-// PENYELARAS STATUS LOGIN SECARA REAL-TIME
+// PENYELARAS STATUS LOGIN SECARA REAL-TIME (SESSION PROTECTED)
 function listenAuthState() {
     if (!auth) return;
     auth.onAuthStateChanged((user) => {
@@ -102,20 +105,20 @@ function listenAuthState() {
 document.addEventListener("DOMContentLoaded", () => {
     setupKeyboardListeners(); 
     
-    // Inisiasi awal stack history agar sistem gestur Android bekerja sinkron [14]
+    // Inisiasi awal tumpukan riwayat agar sistem navigasi Android sinkron [14]
     history.replaceState({ viewId: 'welcome-view', currentSemesterId: null, currentCourseId: null }, '', '#welcome-view');
     navigateTo('welcome-view', false); // Jangan pushState lagi saat pertama dimuat
     
     initFirebase();
 });
 
-// EVENT POPSTATE: Interseptor Gestur "Kembali" Android/iOS agar SPA Mundur Sesuai Menu (Goal 1 & 2) [15]
+// EVENT POPSTATE: Interseptor Gestur "Kembali" Android/iOS agar SPA Mundur Sesuai Menu [15]
 window.addEventListener('popstate', async (e) => {
     const targetView = e.state ? e.state.viewId : null;
 
-    // INTERSEPTOR GESTUR KELUAR: Jika di dashboard dan user usap kembali, pancing konfirmasi Logout (Goal 1 & 2) [15]
+    // INTERSEPTOR GESTUR KELUAR: Jika di dashboard dan user usap kembali, pancing konfirmasi Logout [15]
     if (currentUser && targetView === 'welcome-view') {
-        // Kembalikan paksa tumpukan riwayat agar browser tidak mundur secara visual sebelum ada konfirmasi
+        // Kembalikan tumpukan riwayat agar browser tidak mundur secara visual sebelum disetujui
         history.pushState({ viewId: 'dashboard-view', currentSemesterId: null, currentCourseId: null }, '', '#dashboard-view');
         
         // Panggil dialog konfirmasi keluar kustom secara asinkron
@@ -125,7 +128,7 @@ window.addEventListener('popstate', async (e) => {
         });
 
         if (isConfirmed) {
-            auth.signOut(); // Jika memilih keluar, jalankan logout bersih
+            auth.signOut(); // Jika disetujui, jalankan logout bersih
         }
         return;
     }
@@ -251,7 +254,7 @@ async function saveData() {
 
 // FUNGSI PEMBERSIH INPUT LOGIN & DAFTAR (Solusi Masalah 2)
 function clearAuthInputs() {
-    const ids = ['auth-email', 'auth-password', 'reg-email', 'reg-password'];
+    const ids = ['auth-username', 'auth-password', 'reg-username', 'reg-password'];
     ids.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
@@ -275,8 +278,8 @@ function navigateTo(viewId, pushToHistory = true) {
         document.body.className = 'on-welcome';
         clearAuthInputs(); // Otomatis bersihkan saat kembali ke Welcome Screen
         setTimeout(() => {
-            const authEmail = document.getElementById('auth-email');
-            if (authEmail) authEmail.focus();
+            const authUsername = document.getElementById('auth-username');
+            if (authUsername) authUsername.focus();
         }, 100);
     } else {
         document.body.className = '';
@@ -324,8 +327,8 @@ function setupKeyboardListeners() {
         }
     });
 
-    // 2. Form Login (Email enter -> Fokus ke Password dengan jeda aman, Password enter -> Trigger Login)
-    document.getElementById('auth-email').addEventListener('keydown', (e) => {
+    // 2. Form Login (Username enter -> Fokus ke Password dengan jeda aman, Password enter -> Trigger Login)
+    document.getElementById('auth-username').addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.keyCode === 13) {
             e.preventDefault();
             e.stopPropagation();
@@ -344,8 +347,8 @@ function setupKeyboardListeners() {
         }
     });
 
-    // 3. Form Register (Email enter -> Fokus ke Password baru dengan jeda aman, Password enter -> Trigger Daftar)
-    document.getElementById('reg-email').addEventListener('keydown', (e) => {
+    // 3. Form Register (Username enter -> Fokus ke Password baru dengan jeda aman, Password enter -> Trigger Daftar)
+    document.getElementById('reg-username').addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.keyCode === 13) {
             e.preventDefault();
             e.stopPropagation();
@@ -373,11 +376,11 @@ function toggleAuthMode(showRegister) {
     if (showRegister) {
         document.getElementById('login-card').classList.add('hidden');
         document.getElementById('register-card').classList.remove('hidden');
-        setTimeout(() => document.getElementById('reg-email').focus(), 50); 
+        setTimeout(() => document.getElementById('reg-username').focus(), 50); 
     } else {
         document.getElementById('register-card').classList.add('hidden');
         document.getElementById('login-card').classList.remove('hidden');
-        setTimeout(() => document.getElementById('auth-email').focus(), 50); 
+        setTimeout(() => document.getElementById('auth-username').focus(), 50); 
     }
 }
 
@@ -387,19 +390,21 @@ async function handleLogin() {
         return;
     }
 
-    const email = document.getElementById('auth-email').value.trim();
+    const username = document.getElementById('auth-username').value.trim();
     const password = document.getElementById('auth-password').value;
 
-    if (!email || !password) {
-        showCustomDialog({ title: "Gagal", message: "Email dan password wajib diisi!", showCancel: false });
+    if (!username || !password) {
+        showCustomDialog({ title: "Gagal", message: "Username dan password wajib diisi!", showCancel: false });
         return;
     }
 
     try {
-        await auth.signInWithEmailAndPassword(email, password);
+        // Gabungkan otomatis username dengan domain bayangan sebelum dikirim ke Firebase
+        const virtualEmail = `${username.toLowerCase()}${DUMMY_DOMAIN}`;
+        await auth.signInWithEmailAndPassword(virtualEmail, password);
     } catch (error) {
         console.error(error);
-        showCustomDialog({ title: "Gagal Masuk", message: "Email atau password salah / tidak terdaftar.", showCancel: false });
+        showCustomDialog({ title: "Gagal Masuk", message: "Username atau password salah / tidak terdaftar.", showCancel: false });
     }
 }
 
@@ -409,11 +414,17 @@ async function handleRegister() {
         return;
     }
 
-    const email = document.getElementById('reg-email').value.trim();
+    const username = document.getElementById('reg-username').value.trim();
     const password = document.getElementById('reg-password').value;
 
-    if (!email || !password) {
-        showCustomDialog({ title: "Gagal", message: "Email dan password tidak boleh kosong!", showCancel: false });
+    if (!username || !password) {
+        showCustomDialog({ title: "Gagal", message: "Username dan password tidak boleh kosong!", showCancel: false });
+        return;
+    }
+
+    // Validasi: Username hanya boleh mengandung karakter Alphanumeric standar dan Underscore (_) tanpa spasi
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+        showCustomDialog({ title: "Peringatan", message: "Username hanya boleh berisi huruf, angka, dan underscore (_), tanpa menggunakan spasi!", showCancel: false });
         return;
     }
 
@@ -424,12 +435,15 @@ async function handleRegister() {
 
     try {
         isRegistering = true; // Tandai sedang melakukan registrasi
-        await auth.createUserWithEmailAndPassword(email, password);
+        
+        // Gabungkan otomatis username dengan domain bayangan sebelum didaftarkan ke Firebase
+        const virtualEmail = `${username.toLowerCase()}${DUMMY_DOMAIN}`;
+        await auth.createUserWithEmailAndPassword(virtualEmail, password);
         
         // Memunculkan pop-up sukses pendaftaran
         showCustomDialog({ 
             title: "Daftar Berhasil", 
-            message: "Akun baru Anda berhasil didaftarkan! Silakan masukkan email dan password di kolom masuk untuk login.", 
+            message: "Akun baru Anda berhasil didaftarkan! Silakan masukkan username dan password di kolom masuk untuk login.", 
             showCancel: false 
         });
         
