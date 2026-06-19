@@ -25,59 +25,7 @@ let unsubscribeSnapshot = null; // Menyimpan fungsi penutup listener real-time
 let isRegistering = false;      // Bendera penanda pendaftaran akun baru agar tidak otomatis masuk [10]
 let activeSessionIdForStatus = null; // Menyimpan ID sesi yang statusnya sedang diubah
 
-// KONFIGURASI DATABASE LOKAL (IndexedDB untuk Menyimpan File Asli PDF) [1, 2]
-const DB_NAME = 'edutracker_db';
-const DB_VERSION = 1;
-const STORE_NAME = 'files';
-
-function getDB() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onupgradeneeded = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME);
-            }
-        };
-        request.onsuccess = (e) => resolve(e.target.result);
-        request.onerror = (e) => reject(e.target.error);
-    });
-}
-
-async function saveFileToDB(key, fileBlob) {
-    const db = await getDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.put(fileBlob, key);
-        request.onsuccess = () => resolve();
-        request.onerror = (e) => reject(e.target.error);
-    });
-}
-
-async function getFileFromDB(key) {
-    const db = await getDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.get(key);
-        request.onsuccess = (e) => resolve(e.target.result);
-        request.onerror = (e) => reject(e.target.error);
-    });
-}
-
-async function deleteFileFromDB(key) {
-    const db = await getDB();
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.delete(key);
-        request.onsuccess = () => resolve();
-        request.onerror = (e) => reject(e.target.error);
-    });
-}
-
-// PENYELARAS STATUS LOGIN SECARA REAL-TIME (SESSION PROTECTED)
+// PENYELARAS STATUS LOGIN SECARA REAL-TIME
 function listenAuthState() {
     if (!auth) return;
     auth.onAuthStateChanged((user) => {
@@ -568,9 +516,6 @@ function selectStatusOption(statusValue) {
 
 
 /* ==========================================================================
-   1. DASHBOARD VIEW - MANAJEMEN SEMESTER
-   ========================================================================== */
-/* ==========================================================================
    1. DASHBOARD VIEW - MANAJEMEN SEMESTER (DENGAN SORTING A-Z)
    ========================================================================== */
 function renderDashboard() {
@@ -597,7 +542,6 @@ function renderDashboard() {
         const card = document.createElement('div');
         card.className = 'item-card';
         
-        // Memaksimalkan area klik di seluruh card tanpa dead-zone
         card.addEventListener('click', (e) => {
             if (!e.target.closest('.btn-delete')) {
                 selectSemester(sem.id);
@@ -649,10 +593,6 @@ async function deleteSemester(id, event) {
     });
 
     if (isConfirmed) {
-        const uid = currentUser ? currentUser.uid : "guest";
-        await deleteFileFromDB(`${uid}_${id}_billing`);
-        await deleteFileFromDB(`${uid}_${id}_nilai`);
-
         appData = appData.filter(sem => sem.id !== id);
         saveData();
         renderDashboard(); // Instantly update UI locally
@@ -666,10 +606,7 @@ function selectSemester(id) {
 
 
 /* ==========================================================================
-   2. SEMESTER VIEW - MANAJEMEN MATA KULIAH & BERKAS (SINKRONISASI INDEXEDDB)
-   ========================================================================== */
-/* ==========================================================================
-   2. SEMESTER VIEW - MANAJEMEN MATA KULIAH (DENGAN SORTING A-Z)
+   2. SEMESTER VIEW - MANAJEMEN MATA KULIAH & BERKAS (CLOUD SYNCED BASE64)
    ========================================================================== */
 function renderSemester() {
     const sem = appData.find(s => s.id === currentSemesterId);
@@ -730,6 +667,7 @@ function renderSemester() {
     });
 }
 
+// LOGIKA FILE METADATA UPLOAD + KONVERSI BASE64 CLOUD SYNC (100% Gratis & Auto-Sync) [16]
 async function uploadLocalFile(type) {
     const sem = appData.find(s => s.id === currentSemesterId);
     if (!sem) return;
@@ -737,16 +675,26 @@ async function uploadLocalFile(type) {
     const fileInput = document.getElementById(`file-${type}`);
     if (fileInput.files.length > 0) {
         const file = fileInput.files[0];
-        const uid = currentUser ? currentUser.uid : "guest";
-        const dbKey = `${uid}_${currentSemesterId}_${type}`; 
 
-        try {
-            await saveFileToDB(dbKey, file);
+        // Proteksi Batas Ukuran File (Maksimal 700KB untuk Firestore Document 1MB)
+        if (file.size > 700 * 1024) {
+            showCustomDialog({ 
+                title: "File Terlalu Besar", 
+                message: "Ukuran berkas melebihi 700KB (Maksimal batas unggah cloud gratis). Harap kompres dokumen PDF Anda terlebih dahulu sebelum mengunggah!", 
+                showCancel: false 
+            });
+            fileInput.value = '';
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async function (e) {
+            const base64Data = e.target.result; // Hasil Data URL Base64 [16]
 
             const fileMeta = {
                 name: file.name,
                 uploadedAt: new Date().toLocaleDateString('id-ID'),
-                dbKey: dbKey
+                data: base64Data // Simpan string Base64 langsung ke model data agar tersinkron otomatis lintas perangkat!
             };
 
             if (type === 'billing') {
@@ -755,14 +703,17 @@ async function uploadLocalFile(type) {
                 sem.nilaiFile = fileMeta;
             }
 
-            saveData();
-            renderSemester(); // Instantly update UI locally
+            await saveData(); // Kirim data langsung ke Firestore Cloud! [9]
+            renderSemester(); // Perbarui UI lokal
             
-            showCustomDialog({ title: "Berhasil", message: `Berkas "${file.name}" berhasil diunggah & diamankan di browser!`, showCancel: false });
-        } catch (error) {
-            console.error(error);
-            showCustomDialog({ title: "Gagal", message: "Browser gagal mengamankan file di database lokal.", showCancel: false });
-        }
+            showCustomDialog({ title: "Berhasil", message: `Berkas "${file.name}" berhasil diunggah & disinkronisasikan ke semua perangkat!`, showCancel: false });
+        };
+        
+        reader.onerror = function() {
+            showCustomDialog({ title: "Gagal", message: "Gagal membaca berkas PDF lokal.", showCancel: false });
+        };
+
+        reader.readAsDataURL(file); // Konversi ke Base64 [16]
     }
 }
 
@@ -772,7 +723,7 @@ function renderFileStatus(type, fileMeta) {
 
     if (fileMeta) {
         statusEl.innerHTML = `
-            <span class="file-link" onclick="viewLocalFile('${fileMeta.dbKey}')">📄 ${escapeHTML(fileMeta.name)}</span>
+            <span class="file-link" onclick="viewLocalFile('${type}')">📄 ${escapeHTML(fileMeta.name)}</span>
             <br><span style="font-size:0.7rem;">Diupload: ${fileMeta.uploadedAt}</span>
         `;
         deleteBtn.classList.remove('hidden');
@@ -782,28 +733,47 @@ function renderFileStatus(type, fileMeta) {
     }
 }
 
-async function viewLocalFile(dbKey) {
+// MENAMPILKAN PDF DARI BASE64 CLOUD SECARA AMAN DI TAB BARU (Mencegah Popup Blocker)
+async function viewLocalFile(type) {
+    const sem = appData.find(s => s.id === currentSemesterId);
+    if (!sem) return;
+
+    const fileMeta = type === 'billing' ? sem.billingFile : sem.nilaiFile;
+    if (!fileMeta || !fileMeta.data) {
+        showCustomDialog({ title: "Gagal", message: "Berkas fisik PDF tidak ditemukan.", showCancel: false });
+        return;
+    }
+
     const newTab = window.open('about:blank', '_blank');
     if (!newTab) {
-        showCustomDialog({ title: "Popup Terblokir", message: "Harap aktifkan perizinan popup pada pengaturan browser Anda untuk membuka file.", showCancel: false });
+        showCustomDialog({ title: "Popup Terblokir", message: "Harap aktifkan perizinan popup pada pengaturan browser Anda untuk membuka dokumen.", showCancel: false });
         return;
     }
 
     try {
-        const fileBlob = await getFileFromDB(dbKey);
-        if (fileBlob) {
-            const fileURL = URL.createObjectURL(fileBlob);
-            newTab.location.href = fileURL; 
-        } else {
-            newTab.close();
-            // Informasi bahwa file terikat dengan perangkat lokal (Goal 3.1)
-            showCustomDialog({ title: "Tidak Ditemukan", message: "Berkas fisik PDF tersimpan di perangkat Anda yang lain. Harap unggah berkas di perangkat ini untuk membukanya.", showCancel: false });
-        }
+        // Konversi Base64 kembali ke objek Blob agar bisa dibaca browser secara asinkron
+        const fileBlob = base64ToBlob(fileMeta.data, 'application/pdf');
+        const fileURL = URL.createObjectURL(fileBlob);
+        newTab.location.href = fileURL; // Alihkan tab kosong ke URL Blob PDF
     } catch (error) {
         newTab.close();
         console.error(error);
-        showCustomDialog({ title: "Error", message: "Gagal memproses berkas PDF Anda.", showCancel: false });
+        showCustomDialog({ title: "Error", message: "Gagal membuka dokumen PDF dari cloud.", showCancel: false });
     }
+}
+
+// HELPER: Konversi Base64 ke Blob secara kompatibel
+function base64ToBlob(base64Str, contentType = 'application/pdf') {
+    const parts = base64Str.split(';base64,');
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+
+    for (let i = 0; i < rawLength; ++i) {
+        uInt8Array[i] = raw.charCodeAt(i);
+    }
+
+    return new Blob([uInt8Array], { type: contentType });
 }
 
 async function deleteLocalFile(type) {
@@ -816,22 +786,14 @@ async function deleteLocalFile(type) {
     });
 
     if (isConfirmed) {
-        const uid = currentUser ? currentUser.uid : "guest";
-        const dbKey = `${uid}_${currentSemesterId}_${type}`;
-        try {
-            await deleteFileFromDB(dbKey);
-
-            if (type === 'billing') {
-                sem.billingFile = null;
-            } else {
-                sem.nilaiFile = null;
-            }
-            saveData();
-            renderSemester(); // Instantly update UI locally
-            document.getElementById(`file-${type}`).value = '';
-        } catch (error) {
-            console.error(error);
+        if (type === 'billing') {
+            sem.billingFile = null;
+        } else {
+            sem.nilaiFile = null;
         }
+        await saveData();
+        renderSemester(); // Instantly update UI locally
+        document.getElementById(`file-${type}`).value = '';
     }
 }
 
@@ -916,7 +878,7 @@ function selectCourse(id) {
 
 
 /* ==========================================================================
-   3. TRACKER VIEW - DETAIL SESI & CATATAN (MENGGUNAKAN BADGE PEMILIH KUSTOM - Goal 2)
+   3. TRACKER VIEW - DETAIL SESI & CATATAN
    ========================================================================== */
 function renderTracker() {
     const sem = appData.find(s => s.id === currentSemesterId);
