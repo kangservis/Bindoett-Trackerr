@@ -570,6 +570,9 @@ function selectStatusOption(statusValue) {
 /* ==========================================================================
    1. DASHBOARD VIEW - MANAJEMEN SEMESTER
    ========================================================================== */
+/* ==========================================================================
+   1. DASHBOARD VIEW - MANAJEMEN SEMESTER (DENGAN SORTING A-Z)
+   ========================================================================== */
 function renderDashboard() {
     const semesterListContainer = document.getElementById('semester-list');
     semesterListContainer.innerHTML = '';
@@ -582,13 +585,19 @@ function renderDashboard() {
         return;
     }
 
-    appData.forEach(sem => {
+    // Buat salinan sementara lalu urutkan secara alami A-Z (Semester 1 -> Semester 7 -> Semester 10)
+    const sortedSemesters = [...appData].sort((a, b) => {
+        return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    sortedSemesters.forEach(sem => {
         const totalCourses = sem.courses.length;
         const progress = calculateSemesterProgress(sem);
 
         const card = document.createElement('div');
         card.className = 'item-card';
         
+        // Memaksimalkan area klik di seluruh card tanpa dead-zone
         card.addEventListener('click', (e) => {
             if (!e.target.closest('.btn-delete')) {
                 selectSemester(sem.id);
@@ -659,6 +668,9 @@ function selectSemester(id) {
 /* ==========================================================================
    2. SEMESTER VIEW - MANAJEMEN MATA KULIAH & BERKAS (SINKRONISASI INDEXEDDB)
    ========================================================================== */
+/* ==========================================================================
+   2. SEMESTER VIEW - MANAJEMEN MATA KULIAH (DENGAN SORTING A-Z)
+   ========================================================================== */
 function renderSemester() {
     const sem = appData.find(s => s.id === currentSemesterId);
     if (!sem) {
@@ -687,7 +699,12 @@ function renderSemester() {
         return;
     }
 
-    sem.courses.forEach(course => {
+    // Buat salinan sementara lalu urutkan mata kuliah secara alami A-Z
+    const sortedCourses = [...sem.courses].sort((a, b) => {
+        return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    sortedCourses.forEach(course => {
         const progress = calculateCourseProgress(course);
         const typeLabel = course.type === 'Praktik' ? 'Praktik (3 Sesi)' : 'Tuton (8 Sesi)';
 
