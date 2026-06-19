@@ -24,6 +24,7 @@ let db = null;          // Instansi Firestore Database
 let unsubscribeSnapshot = null; // Menyimpan fungsi penutup listener real-time
 let isRegistering = false;      // Bendera penanda pendaftaran akun baru agar tidak otomatis masuk [10]
 let activeSessionIdForStatus = null; // Menyimpan ID sesi yang statusnya sedang diubah
+let debounceTimer = null;       // Timer penahan penyimpanan catatan (Debounce)
 
 // KONFIGURASI DATABASE LOKAL (IndexedDB untuk Menyimpan File Asli PDF) [1, 2]
 const DB_NAME = 'edutracker_db';
@@ -77,7 +78,7 @@ async function deleteFileFromDB(key) {
     });
 }
 
-// PENYELARAS STATUS LOGIN SECARA REAL-TIME
+// PENYELARAS STATUS LOGIN SECARA REAL-TIME (SESSION PROTECTED)
 function listenAuthState() {
     if (!auth) return;
     auth.onAuthStateChanged((user) => {
@@ -252,6 +253,14 @@ async function saveData() {
     }
 }
 
+// PAKSA SIMPAN CATATAN YANG TERTUNDA (Flush pending save sebelum pindah halaman / logout)
+function flushPendingNotesSave() {
+    if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        saveData(); // Kirim sisa ketikan terakhir langsung ke Firestore Cloud
+    }
+}
+
 // FUNGSI PEMBERSIH INPUT LOGIN & DAFTAR (Solusi Masalah 2)
 function clearAuthInputs() {
     const ids = ['auth-username', 'auth-password', 'reg-username', 'reg-password'];
@@ -261,15 +270,17 @@ function clearAuthInputs() {
     });
 }
 
-// ALUR NAVIGASI SPA DENGAN SINKRONISASI STACK RIWAYAT BROWSER (Goal 1) [14]
+// ALUR NAVIGASI SPA DENGAN SINKRONISASI STACK BROWSER
 function navigateTo(viewId, pushToHistory = true) {
+    flushPendingNotesSave(); // Amankan ketikan catatan yang tertunda sebelum halaman dipindah!
+
     document.querySelectorAll('.view-section').forEach(view => {
         view.classList.add('hidden');
     });
     
     document.getElementById(viewId).classList.remove('hidden');
 
-    // Catat perpindahan halaman di history stack browser agar tombol "Kembali" Android sinkron [14]
+    // Catat perpindahan halaman di history stack browser [14]
     if (pushToHistory) {
         history.pushState({ viewId, currentSemesterId, currentCourseId }, '', `#${viewId}`);
     }
@@ -811,11 +822,9 @@ function base64ToBlob(base64Str, contentType = 'application/pdf') {
     const raw = window.atob(parts[1]);
     const rawLength = raw.length;
     const uInt8Array = new Uint8Array(rawLength);
-
     for (let i = 0; i < rawLength; ++i) {
         uInt8Array[i] = raw.charCodeAt(i);
     }
-
     return new Blob([uInt8Array], { type: contentType });
 }
 
@@ -929,7 +938,7 @@ function selectCourse(id) {
 
 
 /* ==========================================================================
-   3. TRACKER VIEW - DETAIL SESI & CATATAN (MENGGUNAKAN BADGE PEMILIH KUSTOM)
+   3. TRACKER VIEW - DETAIL SESI & CATATAN
    ========================================================================== */
 function renderTracker() {
     const sem = appData.find(s => s.id === currentSemesterId);
@@ -1028,7 +1037,15 @@ function updateSessionNote(sessionId, textContent) {
     const session = course.sessions.find(s => s.id === sessionId);
     if (session) {
         session.note = textContent;
-        saveData();
+        
+        // Simpan ke cadangan lokal secara instan
+        localStorage.setItem(`edutracker_data_${currentUser.uid}`, JSON.stringify(appData));
+
+        // Debounce Firestore Save (Goal: Mengatasi Race Condition & Out-of-order writes) [18]
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            saveData(); // Tulis ke cloud hanya setelah selesai mengetik (jeda 700ms) [18]
+        }, 700);
     }
 }
 
