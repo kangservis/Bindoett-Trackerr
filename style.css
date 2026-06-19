@@ -680,7 +680,8 @@ body.on-welcome .app-header {
     border: 1px solid var(--border-color);
     background-color: var(--bg-color);
     border-radius: 10px;
-    resize: vertical;
+    resize: none;          /* Matikan fitur tarik manual agar dikontrol penuh oleh JS */
+    overflow-y: hidden;    /* Sembunyikan scrollbar agar tampilan bersih */
     outline: none;
     color: var(--text-main);
     transition: border-color var(--transition-speed);
