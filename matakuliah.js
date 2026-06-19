@@ -24,6 +24,7 @@ let db = null;          // Instansi Firestore Database
 let unsubscribeSnapshot = null; // Menyimpan fungsi penutup listener real-time
 let isRegistering = false;      // Bendera penanda pendaftaran akun baru agar tidak otomatis masuk [10]
 let activeSessionIdForStatus = null; // Menyimpan ID sesi yang statusnya sedang diubah
+let debounceTimer = null;       // Timer penahan penyimpanan catatan (Debounce) [18]
 
 // KONFIGURASI DATABASE LOKAL (IndexedDB untuk Menyimpan File Asli PDF) [1, 2]
 const DB_NAME = 'edutracker_db';
@@ -261,8 +262,19 @@ function clearAuthInputs() {
     });
 }
 
-// ALUR NAVIGASI SPA DENGAN SINKRONISASI STACK BROWSER (Murni Sinkron & Super Lincah - FIX CRASH)
+// ALUR NAVIGASI SPA SINKRON (SANGAT LINCAH & 100% AMAN DARI OVERWRITE DATA KOSONG)
 function navigateTo(viewId, pushToHistory = true) {
+    // SINKRONISASI PENCEGAH DATA HILANG: Hanya panggil saveData() jika kita meninggalkan tracker-view catatan [9, 17]
+    const leavingTracker = !document.getElementById('tracker-view').classList.contains('hidden');
+    if (leavingTracker) {
+        // Matikan pending timer tulis yang menunggak dan langsung kirim data asli ke Firestore Cloud [9, 18]
+        if (debounceTimer) {
+            clearTimeout(debounceTimer);
+            debounceTimer = null;
+        }
+        saveData(); 
+    }
+
     document.querySelectorAll('.view-section').forEach(view => {
         view.classList.add('hidden');
     });
@@ -469,6 +481,11 @@ async function handleLogout() {
     });
 
     if (isConfirmed) {
+        // Matikan pending timer tulis jika ada saat logout
+        if (debounceTimer) {
+            clearTimeout(debounceTimer);
+            debounceTimer = null;
+        }
         auth.signOut();
     }
 }
@@ -662,7 +679,7 @@ function selectSemester(id) {
 
 
 /* ==========================================================================
-   2. SEMESTER VIEW - MANAJEMEN MATA KULIAH & BERKAS (CLOUD SYNCED BASE64)
+   2. SEMESTER VIEW - MANAJEMEN MATA KULIAH & BERKAS (SINKRONISASI CLOUD)
    ========================================================================== */
 function renderSemester() {
     const sem = appData.find(s => s.id === currentSemesterId);
@@ -723,7 +740,7 @@ function renderSemester() {
     });
 }
 
-// LOGIKA FILE METADATA UPLOAD + KONVERSI BASE64 CLOUD SYNC (100% Gratis & Auto-Sync) [16]
+// LOGIKA FILE METADATA UPLOAD + KONVERSI BASE64 CLOUD SYNC [16]
 async function uploadLocalFile(type) {
     const sem = appData.find(s => s.id === currentSemesterId);
     if (!sem) return;
@@ -923,7 +940,7 @@ function selectCourse(id) {
 
 
 /* ==========================================================================
-   3. TRACKER VIEW - DETAIL SESI & CATATAN (SISTEM BLUR AUTO-SAVE BARU) [8, 17]
+   3. TRACKER VIEW - DETAIL SESI & CATATAN
    ========================================================================== */
 function renderTracker() {
     const sem = appData.find(s => s.id === currentSemesterId);
@@ -957,7 +974,7 @@ function renderTracker() {
         if (session.status === 'Done') selectClass = 'status-done';
 
         // GANTI SELECT DROPDOWN MENJADI TOMBOL STATUS KLIK (Goal 2) [8]
-        // Ditambahkan Event 'onblur' untuk memaksa trigger penyimpanan mutlak ke Cloud Firestore saat mengklik area luar (Goal 1) [8, 17]
+        // Diperbarui: Event onblur dihapus penuh untuk mengembalikan kestabilan sinkronisasi total [17]
         card.innerHTML = `
             <div class="session-main-row">
                 <div class="session-title">
@@ -976,7 +993,6 @@ function renderTracker() {
                     class="session-note-input" 
                     placeholder="Tambahkan catatan untuk Sesi ${session.sessionNum}..." 
                     oninput="updateSessionNote('${session.id}', this.value); autoResizeTextarea(this);"
-                    onblur="saveData();"
                 >${escapeHTML(session.note || '')}</textarea>
             </div>
         `;
@@ -1013,7 +1029,7 @@ function updateSessionStatus(sessionId, newStatus) {
     }
 }
 
-// LOGIKA SAVE ON BLUR: Ketikan disimpan instan di memori lokal agar lincah, penulisan Cloud Firestore hanya terjadi saat klik luar / blur (Goal 1) [8, 17]
+// LOGIKA DEBOUNCE SINKRONISASI CLOUD (Goal 1 & 2): Perbaikan komprehensif, data dikirim 1 detik setelah berhenti mengetik [18]
 function updateSessionNote(sessionId, textContent) {
     const sem = appData.find(s => s.id === currentSemesterId);
     if (!sem) return;
@@ -1025,8 +1041,14 @@ function updateSessionNote(sessionId, textContent) {
     if (session) {
         session.note = textContent;
         
-        // Simpan langsung ke memori lokal browser agar tetap aman walau koneksi mati mendadak
+        // Simpan langsung ke memori lokal browser agar lincah dan aman
         localStorage.setItem(`edutracker_data_${currentUser.uid}`, JSON.stringify(appData));
+
+        // Jalankan timer tunda pengetikan (1 detik) sebelum menulis ke cloud Firestore [18]
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            saveData(); // Kirim data bersih dan lengkap ke cloud Google [9, 18]
+        }, 1000);
     }
 }
 
