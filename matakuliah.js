@@ -145,6 +145,17 @@ function startRealtimeSync(uid) {
             appData = [];
         }
         localStorage.setItem(`edutracker_data_${uid}`, JSON.stringify(appData));
+        
+        // AUTO-MIGRATION (SAFE MODE): Dibungkus try-catch agar jika gagal, UI tidak akan blank
+        try {
+            if (typeof window.fixExistingTutonSessions === 'function') {
+                window.fixExistingTutonSessions();
+            }
+        } catch (err) {
+            console.warn("Migrasi auto dilewati untuk sesi ini karena struktur data unik:", err);
+        }
+        
+        // PASTIKAN INI SELALU DIJALANKAN (Data akan dipaksa muncul ke layar)
         renderCurrentView();
     }, (error) => {
         console.error("Kesalahan sinkronisasi Firestore:", error);
@@ -176,10 +187,24 @@ function loadDataOffline() {
     const uid = currentUser ? currentUser.uid : "guest";
     const savedData = localStorage.getItem(`edutracker_data_${uid}`);
     if (savedData) {
-        appData = JSON.parse(savedData);
+        try {
+            appData = JSON.parse(savedData);
+        } catch(e) {
+            appData = [];
+        }
     } else {
         appData = [];
     }
+    
+    // AUTO-MIGRATION (SAFE MODE)
+    try {
+        if (typeof window.fixExistingTutonSessions === 'function') {
+            window.fixExistingTutonSessions();
+        }
+    } catch (err) {
+        console.warn("Offline migrasi dilewati:", err);
+    }
+    
     navigateTo('dashboard-view');
 }
 
@@ -830,14 +855,15 @@ function addCourse() {
 
     if (type === 'Tuton') {
         let tugasCounter = 1;
-        let diskusiCounter = 1;
+        // Penyesuaian: diskusiCounter dihapus karena angka diskusi mengikuti nomor Sesi (s)
         for (let s = 1; s <= 8; s++) {
             let isTugas = (s === 3 || s === 5 || s === 7);
             sessions.push({
                 id: 'sess_' + s + '_' + Date.now(),
                 sessionNum: s,
                 type: isTugas ? 'Tugas' : 'Diskusi',
-                title: isTugas ? `Tugas ${tugasCounter++}` : `Diskusi ${diskusiCounter++}`,
+                // Menggunakan variabel 's' langsung untuk penamaan Diskusi
+                title: isTugas ? `Tugas ${tugasCounter++}` : `Diskusi ${s}`,
                 status: 'Belum Disentuh',
                 note: ''
             });
@@ -908,6 +934,34 @@ function renderTracker() {
         return;
     }
 
+    // --- JIT (Just-In-Time) AUTO-MIGRATION ---
+    // Memperbaiki judul sesi lama tepat saat mata kuliah diklik untuk mencegah tabrakan Firebase
+    if (course.type === 'Tuton') {
+        let isModified = false;
+        let tugasCounter = 1;
+        
+        course.sessions.forEach(session => {
+            const s = Number(session.sessionNum); // Paksa jadi tipe angka
+            let isTugas = (s === 3 || s === 5 || s === 7);
+            
+            // Format yang seharusnya
+            let expectedTitle = isTugas ? `Tugas ${tugasCounter++}` : `Diskusi ${s}`;
+            let expectedType = isTugas ? 'Tugas' : 'Diskusi';
+            
+            // Jika data lawas tidak sama dengan format baru, timpa dan perbaiki!
+            if (session.title !== expectedTitle || session.type !== expectedType) {
+                session.title = expectedTitle;
+                session.type = expectedType;
+                isModified = true;
+            }
+        });
+
+        if (isModified) {
+            saveData(); // Simpan diam-diam ke Firebase
+        }
+    }
+    // ------------------------------------------
+
     document.getElementById('current-course-title').innerText = course.name;
     document.getElementById('current-course-parent-semester').innerText = sem.name;
 
@@ -926,8 +980,6 @@ function renderTracker() {
         if (session.status === 'Proses') selectClass = 'status-process';
         if (session.status === 'Done') selectClass = 'status-done';
 
-        // GANTI SELECT DROPDOWN MENJADI TOMBOL STATUS KLIK (Goal 2) [8]
-        // Diperbarui: Event onblur dihapus penuh untuk mengembalikan kestabilan sinkronisasi total [17]
         card.innerHTML = `
             <div class="session-main-row">
                 <div class="session-title">
@@ -952,7 +1004,6 @@ function renderTracker() {
         sessionListContainer.appendChild(card);
     });
 
-    // SISTEM AUTO-FIT ON LOAD: Menghitung tinggi scroll semula secara dinamis saat halaman baru dimuat [17]
     setTimeout(() => {
         const textareas = sessionListContainer.querySelectorAll('.session-note-input');
         textareas.forEach(textarea => {
@@ -1043,4 +1094,62 @@ function escapeHTML(str) {
             '"': '&quot;'
         }[tag] || tag)
     );
+
+/* ==========================================================================
+   ONE-TIME MIGRATION SCRIPT: PERBAIKAN PENAMAAN SESI TUTON LAMA
+   ========================================================================== */
+function fixExistingTutonSessions() {
+    // Pastikan data sudah dimuat
+    if (!appData || appData.length === 0) {
+        console.warn("Data kosong atau belum dimuat, tidak ada yang diperbarui.");
+        return;
+    }
+
+    let isModified = false;
+
+    // Looping setiap semester
+    appData.forEach(sem => {
+        if (sem.courses && sem.courses.length > 0) {
+            // Looping setiap mata kuliah dalam semester
+            sem.courses.forEach(course => {
+                // Hanya perbaiki jika tipe mata kuliah adalah 'Tuton'
+                if (course.type === 'Tuton') {
+                    let tugasCounter = 1;
+                    
+                    // Looping setiap sesi dalam mata kuliah Tuton
+                    course.sessions.forEach(session => {
+                        const s = session.sessionNum;
+                        let isTugas = (s === 3 || s === 5 || s === 7);
+                        
+                        // Tentukan judul baru yang seharusnya (Diskusi langsung mengikuti nomor sesi)
+                        let expectedTitle = isTugas ? `Tugas ${tugasCounter++}` : `Diskusi ${s}`;
+                        
+                        // Jika judul lama di database tidak sama dengan format baru, timpa!
+                        if (session.title !== expectedTitle) {
+                            session.title = expectedTitle;
+                            isModified = true;
+                        }
+                    });
+                }
+            });
+        }
+    });
+
+    // Jika ada data yang diubah, simpan permanen ke Firestore & LocalStorage lalu refresh UI
+    if (isModified) {
+        saveData(); 
+        renderCurrentView(); 
+        showCustomDialog({
+            title: "Migrasi Berhasil",
+            message: "Semua mata kuliah Tuton lama telah berhasil diperbarui ke format penamaan yang baru!",
+            showCancel: false
+        });
+    } else {
+        showCustomDialog({
+            title: "Info",
+            message: "Tidak ada data yang perlu diubah. Semua mata kuliah Tuton sudah menggunakan format terbaru.",
+            showCancel: false
+        });
+    }
+}
 }
